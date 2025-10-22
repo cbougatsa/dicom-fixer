@@ -2,3 +2,4 @@ fastapi
 uvicorn
 pydicom
 python-multipart
+zipfile
