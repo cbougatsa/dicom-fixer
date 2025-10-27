@@ -10,11 +10,16 @@ app = FastAPI(title="DICOM Fixer API")
 # --- Enable CORS ---
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # change to your domain if needed
+    allow_origins=[
+        "https://fiddle.jshell.net",  # your testing origin
+        "https://yourdomain.com",     # add your production frontend too
+        "http://localhost:3000",      # local dev
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 def fix_single_dicom(raw: bytes, rows: int, cols: int, bits: int = 16) -> bytes:
     """Creates a valid DICOM file from raw pixel bytes and returns the file content as bytes."""
