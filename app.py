@@ -55,4 +55,57 @@ def fix_single_dicom(raw: bytes, rows: int, cols: int, bits: int = 16) -> bytes:
     ds.SeriesInstanceUID = generate_uid()
     ds.ImagePositionPatient = [0.0, 0.0, 0.0]
     ds.ImageOrientationPatient = [1.0, 0.0, 0.0, 0.0, 1.0, 0.0]
-    ds.PixelSpacing = [1.0,]()
+    ds.PixelSpacing = [1.0, 1.0]
+    ds.SliceThickness = 1.0
+
+    with io.BytesIO() as buffer:
+        ds.save_as(buffer, write_like_original=False)
+        return buffer.getvalue()
+
+
+@app.post("/fixdicom-zip")
+async def fix_dicom_zip(file: UploadFile, rows: int, cols: int, bits: int = 16):
+    """
+    Accept a ZIP file of DICOM (or raw) files, fix each one, and return a ZIP of corrected DICOMs.
+    """
+    try:
+        zip_bytes = await file.read()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            input_zip_path = os.path.join(tmpdir, "input.zip")
+            with open(input_zip_path, "wb") as f:
+                f.write(zip_bytes)
+
+            # Extract uploaded ZIP
+            with zipfile.ZipFile(input_zip_path, "r") as zip_ref:
+                zip_ref.extractall(tmpdir)
+
+            # Prepare output ZIP in memory
+            output_zip_bytes = io.BytesIO()
+            with zipfile.ZipFile(output_zip_bytes, "w", zipfile.ZIP_DEFLATED) as output_zip:
+                for name in os.listdir(tmpdir):
+                    if not name.lower().endswith((".dcm", ".raw", ".bin")):
+                        continue
+                    input_path = os.path.join(tmpdir, name)
+                    with open(input_path, "rb") as f:
+                        raw = f.read()
+
+                    try:
+                        fixed_data = fix_single_dicom(raw, rows, cols, bits)
+                        output_zip.writestr(f"fixed_{name}", fixed_data)
+                    except Exception as e:
+                        output_zip.writestr(f"error_{name}.txt", str(e))
+
+            output_zip_bytes.seek(0)
+
+            # ✅ Return the ZIP directly from memory
+            return StreamingResponse(
+                output_zip_bytes,
+                media_type="application/zip",
+                headers={"Content-Disposition": 'attachment; filename="fixed_dicoms.zip"'},
+            )
+
+    except zipfile.BadZipFile:
+        raise HTTPException(status_code=400, detail="Uploaded file is not a valid ZIP archive.")
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
