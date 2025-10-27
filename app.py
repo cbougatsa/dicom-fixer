@@ -11,9 +11,9 @@ app = FastAPI(title="DICOM Fixer API")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "https://fiddle.jshell.net",  # testing origin
-        "https://yourdomain.com",     # production frontend
-        "http://localhost:3000",      # local dev
+        "https://dev.apollo-test.com/",
+        "https://app.apollo-test.com/",
+        "http://localhost:5173/",      # local dev
     ],
     allow_credentials=True,
     allow_methods=["*"],
