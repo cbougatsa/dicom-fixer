@@ -57,7 +57,7 @@ def fix_single_dicom(ds: FileDataset) -> bytes:
         return buffer.getvalue()
 
 
-@app.post("/fixdicom-zip")
+@app.post("/dicom/fix")
 async def fix_dicom_zip(file: UploadFile):
     """Accept a ZIP file of DICOM files, fix each one, and return a ZIP of corrected DICOMs."""
     print(f"[INFO] Received ZIP: {file.filename}")
@@ -134,7 +134,7 @@ async def fix_dicom_zip(file: UploadFile):
         return JSONResponse(status_code=500, content={"error": str(e)})
 
 
-@app.post("/nifti-to-dicom")
+@app.post("dicom/nifti-conert")
 async def nifti_to_dicom_zip(file: UploadFile):
     """
     Convert a .nii or .nii.gz file to a ZIP of DICOM slices
