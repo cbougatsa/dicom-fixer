@@ -134,7 +134,7 @@ async def fix_dicom_zip(file: UploadFile):
         return JSONResponse(status_code=500, content={"error": str(e)})
 
 
-@app.post("dicom/nifti-convert")
+@app.post("/dicom/nifti-convert")
 async def nifti_to_dicom_zip(file: UploadFile):
     """
     Convert a .nii or .nii.gz file to a ZIP of DICOM slices
