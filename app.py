@@ -223,7 +223,7 @@ async def nifti_to_dicom_zip(file: UploadFile):
                     # Write slice
                     with io.BytesIO() as buffer:
                         ds.save_as(buffer, write_like_original=False)
-                        zip_out.writestr(f"slice_{i:04d}.dcm", buffer.getvalue())
+                        zip_out.writestr(f"{i:04d}.dcm", buffer.getvalue())
 
             output_zip.seek(0)
             return StreamingResponse(
