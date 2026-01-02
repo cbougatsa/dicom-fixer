@@ -2,13 +2,11 @@ from fastapi import FastAPI, UploadFile, HTTPException
 from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydicom.dataset import Dataset, FileDataset
-from pydicom.uid import ExplicitVRLittleEndian, generate_uid
+from pydicom.uid import ExplicitVRLittleEndian, CTImageStorage, generate_uid
 from pydicom.errors import InvalidDicomError
 import tempfile, datetime, os, zipfile, io, traceback, pydicom
 import nibabel as nib
 import numpy as np
-from pydicom.dataset import Dataset, FileDataset
-from pydicom.uid import ExplicitVRLittleEndian, CTImageStorage, generate_uid
 
 app = FastAPI(title="DICOM Fixer API")
 
