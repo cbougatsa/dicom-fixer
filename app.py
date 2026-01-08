@@ -136,10 +136,6 @@ async def fix_dicom_zip(file: UploadFile):
 
 @app.post("/dicom/nifti-convert")
 async def nifti_to_dicom_zip(file: UploadFile):
-    """
-    Convert a .nii or .nii.gz file to a ZIP of DICOM slices
-    """
-    print(f"[INFO] Received NIfTI: {file.filename}")
 
     if not file.filename.lower().endswith((".nii", ".nii.gz")):
         raise HTTPException(status_code=400, detail="Only .nii or .nii.gz files are supported")
@@ -147,52 +143,41 @@ async def nifti_to_dicom_zip(file: UploadFile):
     try:
         with tempfile.TemporaryDirectory() as tmpdir:
             nifti_path = os.path.join(tmpdir, file.filename)
-            with open(nifti_path, "wb") as f:
-                f.write(await file.read())
 
-            # Load NIfTI
-            nii = nib.load(nifti_path)
-            data = nii.get_fdata()
+            # stream upload to disk
+            with open(nifti_path, "wb") as f:
+                while chunk := await file.read(1024 * 1024):
+                    f.write(chunk)
+
+            nii = nib.load(nifti_path, mmap=True)
+            dataobj = nii.dataobj
             affine = nii.affine
 
-            # Normalize to int16 (DICOM-friendly)
-            data = np.asarray(data, dtype=np.int16)
+            rows, cols, slices = dataobj.shape
 
-            # Volume shape
-            rows, cols, slices = data.shape
-            print(f"[DEBUG] Volume shape: {data.shape}")
-
-            # Shared UIDs
             study_uid = generate_uid()
             series_uid = generate_uid()
 
-            output_zip = io.BytesIO()
-            with zipfile.ZipFile(output_zip, "w", zipfile.ZIP_DEFLATED) as zip_out:
-                for i in range(slices):
-                    ds = FileDataset(
-                        None,
-                        {},
-                        file_meta=Dataset(),
-                        preamble=b"\0" * 128,
-                    )
+            zip_path = os.path.join(tmpdir, "dicom_from_nifti.zip")
 
-                    # File meta
+            with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zip_out:
+                for i in range(slices):
+                    slice_data = np.asarray(dataobj[:, :, i], dtype=np.int16)
+
+                    ds = FileDataset(None, {}, file_meta=Dataset(), preamble=b"\0" * 128)
                     ds.file_meta.TransferSyntaxUID = ExplicitVRLittleEndian
                     ds.file_meta.MediaStorageSOPClassUID = CTImageStorage
                     ds.file_meta.MediaStorageSOPInstanceUID = generate_uid()
 
-                    # Core identifiers
                     ds.SOPClassUID = CTImageStorage
                     ds.SOPInstanceUID = ds.file_meta.MediaStorageSOPInstanceUID
                     ds.StudyInstanceUID = study_uid
                     ds.SeriesInstanceUID = series_uid
                     ds.Modality = "CT"
 
-                    # Patient (dummy / anonymized)
                     ds.PatientName = "Anonymous"
                     ds.PatientID = "NIFTI001"
 
-                    # Image geometry
                     ds.Rows = rows
                     ds.Columns = cols
                     ds.InstanceNumber = i + 1
@@ -205,8 +190,6 @@ async def nifti_to_dicom_zip(file: UploadFile):
                     ds.PixelSpacing = [1.0, 1.0]
                     ds.SliceThickness = 1.0
 
-                    # Pixel data
-                    slice_data = data[:, :, i]
                     ds.PixelData = slice_data.tobytes()
                     ds.BitsAllocated = 16
                     ds.BitsStored = 16
@@ -215,26 +198,19 @@ async def nifti_to_dicom_zip(file: UploadFile):
                     ds.PhotometricInterpretation = "MONOCHROME2"
                     ds.PixelRepresentation = 1
 
-                    # Dates
                     now = datetime.datetime.now()
                     ds.ContentDate = now.strftime("%Y%m%d")
                     ds.ContentTime = now.strftime("%H%M%S")
 
-                    # Write slice
-                    with io.BytesIO() as buffer:
-                        ds.save_as(buffer, write_like_original=False)
-                        zip_out.writestr(f"{i:04d}.dcm", buffer.getvalue())
+                    slice_path = os.path.join(tmpdir, f"{i:04d}.dcm")
+                    ds.save_as(slice_path, write_like_original=False)
+                    zip_out.write(slice_path, arcname=f"{i:04d}.dcm")
 
-            output_zip.seek(0)
             return StreamingResponse(
-                output_zip,
+                open(zip_path, "rb"),
                 media_type="application/zip",
-                headers={
-                    "Content-Disposition": 'attachment; filename="dicom_from_nifti.zip"'
-                },
+                headers={"Content-Disposition": "attachment; filename=dicom_from_nifti.zip"},
             )
 
     except Exception as e:
-        print("[ERROR] NIfTI conversion failed")
-        print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
